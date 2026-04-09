@@ -1,0 +1,14 @@
+{{ $item := .item }}
+{{ $has_attachments := partial "functions/has_attachments" $item }}
+
+<div class="pub-list-item view-citation" style="margin-bottom: 1rem">
+  <i class="far fa-file-alt pub-icon" aria-hidden="true"></i>
+
+  {{ partial "functions/publication_apa" (dict "item" $item) }}
+
+  {{ if $has_attachments }}
+    <div class="flex flex-wrap space-x-3">
+      {{ partial "page_links" (dict "page" $item "is_list" 1) }}
+    </div>
+  {{ end }}
+</div>

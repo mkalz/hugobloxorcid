@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest a focused improvement for the importer or bundled Hugo overrides.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What workflow or limitation should change?
+      placeholder: Describe the gap in the current behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What should the tool do differently?
+      placeholder: Describe the desired behavior or CLI option.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add example ORCID records, DOI cases, or Hugo output expectations if relevant.

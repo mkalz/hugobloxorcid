@@ -1,0 +1,46 @@
+name: Bug report
+description: Report a reproducible defect in the importer or example overrides.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+      placeholder: A clear description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the command you ran and the relevant input data shape.
+      placeholder: |
+        1. Run ...
+        2. Import ORCID ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, OS, and installation method.
+      placeholder: macOS 15, Python 3.12, pip install -e .[pdf]
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste traceback, warnings, or generated front matter if relevant.
+      render: shell

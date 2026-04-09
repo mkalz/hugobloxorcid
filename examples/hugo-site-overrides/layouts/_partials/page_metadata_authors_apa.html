@@ -1,0 +1,42 @@
+{{- $authors := .Params.authors -}}
+
+{{ if $authors }}
+  {{ if not (reflect.IsSlice $authors) }}
+    {{- $authors = slice $authors -}}
+  {{ end }}
+
+  {{- $formatted := slice -}}
+  {{- range $i, $raw := $authors -}}
+    {{- $rawStr := printf "%v" $raw -}}
+    {{- $name := replaceRE "^\\s+|\\s+$" "" $rawStr -}}
+    {{- if and (not (in $name " ")) (ne $name "") -}}
+      {{- $profile := partial "functions/get_author_profile" $name -}}
+      {{- with $profile.title -}}
+        {{- $name = . -}}
+      {{- end -}}
+    {{- end -}}
+    {{- $parts := split $name " " -}}
+    {{- $last := index $parts (sub (len $parts) 1) -}}
+    {{- $firstNames := slice -}}
+    {{- if gt (len $parts) 1 -}}
+      {{- $firstNames = first (sub (len $parts) 1) $parts -}}
+    {{- end -}}
+    {{- $initials := slice -}}
+    {{- range $firstNames -}}
+      {{- if ne . "" -}}
+        {{- $initial := substr . 0 1 -}}
+        {{- $initials = $initials | append (printf "%s." $initial) -}}
+      {{- end -}}
+    {{- end -}}
+    {{- $authorStr := printf "%s, %s" $last (delimit $initials " ") -}}
+    {{- $authorStr = replaceRE "\\s+$" "" $authorStr -}}
+    {{- $formatted = $formatted | append $authorStr -}}
+  {{- end -}}
+
+  {{- range $index, $author := $formatted -}}
+    {{- if gt $index 0 }}
+      {{- if eq (sub (len $formatted) 1) $index }}, & {{ else }}, {{- end }}
+    {{- end }}
+    {{- $author }}
+  {{- end -}}
+{{ end }}

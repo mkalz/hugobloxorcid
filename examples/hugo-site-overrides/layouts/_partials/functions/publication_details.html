@@ -1,0 +1,74 @@
+{{- $item := .item -}}
+{{- $publication_full := $item.Params.publication | default $item.Params.publication_short -}}
+{{- if not $publication_full -}}
+  {{- return "" -}}
+{{- end -}}
+
+{{- $formatted_publication := "" -}}
+{{- if in $publication_full "*" -}}
+  {{- $formatted_publication = $publication_full | markdownify -}}
+{{- else -}}
+  {{- $formatted_publication = printf "<em>%s</em>" (htmlEscape $publication_full) | safeHTML -}}
+{{- end -}}
+
+{{- $edition := "" -}}
+{{- if isset $item.Params "edition" -}}
+  {{- $edition = printf "%v" $item.Params.edition -}}
+{{- else if isset $item.Params "edition_number" -}}
+  {{- $edition = printf "%v" $item.Params.edition_number -}}
+{{- end -}}
+
+{{- $volume := "" -}}
+{{- if isset $item.Params "volume" -}}
+  {{- $volume = printf "%v" $item.Params.volume -}}
+{{- end -}}
+
+{{- $issue := "" -}}
+{{- if isset $item.Params "issue" -}}
+  {{- $issue = printf "%v" $item.Params.issue -}}
+{{- else if isset $item.Params "number" -}}
+  {{- $issue = printf "%v" $item.Params.number -}}
+{{- end -}}
+
+{{- $volume_issue := "" -}}
+{{- if $volume -}}
+  {{- $volume_issue = $volume -}}
+{{- end -}}
+{{- if $issue -}}
+  {{- if ne $volume_issue "" -}}
+    {{- $volume_issue = printf "%s(%s)" $volume_issue $issue -}}
+  {{- else -}}
+    {{- $volume_issue = printf "(%s)" $issue -}}
+  {{- end -}}
+{{- end -}}
+
+{{- $pages := "" -}}
+{{- if isset $item.Params "pages" -}}
+  {{- $rawPages := $item.Params.pages -}}
+  {{- if reflect.IsSlice $rawPages -}}
+    {{- $pages = delimit $rawPages ", " -}}
+  {{- else -}}
+    {{- $pages = printf "%v" $rawPages -}}
+  {{- end -}}
+{{- else if isset $item.Params "page" -}}
+  {{- $pages = printf "%v" $item.Params.page -}}
+{{- else if and (isset $item.Params "page_first") (isset $item.Params "page_last") -}}
+  {{- $pages = printf "%v-%v" $item.Params.page_first $item.Params.page_last -}}
+{{- end -}}
+
+{{- $details := slice -}}
+{{- if $edition -}}
+  {{- $details = $details | append (printf "%s. ed." $edition) -}}
+{{- end -}}
+{{- if $volume_issue -}}
+  {{- $details = $details | append $volume_issue -}}
+{{- end -}}
+{{- if $pages -}}
+  {{- $details = $details | append $pages -}}
+{{- end -}}
+
+{{- if gt (len $details) 0 -}}
+  {{- printf "%s, %s" $formatted_publication (delimit $details ", ") | safeHTML -}}
+{{- else -}}
+  {{- $formatted_publication -}}
+{{- end -}}

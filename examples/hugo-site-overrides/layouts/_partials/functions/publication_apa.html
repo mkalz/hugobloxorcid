@@ -1,0 +1,58 @@
+{{- $item := .item | default . -}}
+{{- $year_value := $item.Params.event_start | default $item.Date -}}
+{{- $year := (time $year_value).Format "2006" -}}
+{{- $publication := $item.Params.publication | default $item.Params.publication_short -}}
+
+{{- $volume := "" -}}
+{{- with $item.Params.volume -}}
+  {{- $volume = printf "%v" . -}}
+{{- end -}}
+
+{{- $issue := "" -}}
+{{- if isset $item.Params "issue" -}}
+  {{- $issue = printf "%v" $item.Params.issue -}}
+{{- else if isset $item.Params "number" -}}
+  {{- $issue = printf "%v" $item.Params.number -}}
+{{- end -}}
+
+{{- $pages := "" -}}
+{{- if isset $item.Params "pages" -}}
+  {{- $rawPages := $item.Params.pages -}}
+  {{- if reflect.IsSlice $rawPages -}}
+    {{- $pages = delimit $rawPages ", " -}}
+  {{- else -}}
+    {{- $pages = printf "%v" $rawPages -}}
+  {{- end -}}
+{{- else if isset $item.Params "page" -}}
+  {{- $pages = printf "%v" $item.Params.page -}}
+{{- else if and (isset $item.Params "page_first") (isset $item.Params "page_last") -}}
+  {{- $pages = printf "%v-%v" $item.Params.page_first $item.Params.page_last -}}
+{{- end -}}
+
+{{- $doi := "" -}}
+{{- with $item.Params.hugoblox -}}
+  {{- with .ids -}}
+    {{- with .doi -}}
+      {{- $doi = . -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- $journal_block := "" -}}
+{{- with $publication -}}
+  {{- $journal_block = printf "%v" . -}}
+{{- end -}}
+{{- with $volume -}}
+  {{- if ne $journal_block "" -}}
+    {{- $journal_block = printf "%s, %s" $journal_block . -}}
+  {{- else -}}
+    {{- $journal_block = . -}}
+  {{- end -}}
+{{- end -}}
+
+<span class="article-metadata li-cite-author">{{ partial "page_metadata_authors_apa" $item }}</span>
+({{- $year -}}). {{ $item.Title }}.
+{{- if ne $journal_block "" }} <em>{{ $journal_block }}</em>{{ end -}}
+{{- with $issue }}({{ . }}){{ end -}}
+{{- with $pages }}{{ if ne $journal_block "" }}, {{ . }}{{ else }} {{ . }}{{ end }}{{ end -}}.
+{{- with $doi }} <a href="https://doi.org/{{ . }}" target="_blank" rel="noopener">https://doi.org/{{ . }}</a>{{ end -}}
