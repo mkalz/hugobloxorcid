@@ -88,6 +88,8 @@ python scripts/orcid_import.py --help
 hugoblox-orcid-import --help
 ```
 
+For maintainers, PyPI publishing is automated via `.github/workflows/publish.yml` using GitHub trusted publishing.
+
 For contributions, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Repository layout
