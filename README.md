@@ -14,6 +14,8 @@ Import publications from **ORCID** into HugoBlox/Hugo `content/publications/` bu
 - downloads `index.pdf` when a reachable PDF is available
 - generates `featured.png` from the PDF
 - avoids orphan screenshots when no PDF could be fetched
+- skips already imported publications reliably via DOI and ORCID work identifiers
+- includes a monthly GitHub Actions sync workflow for hands-free updates
 - includes optional HugoBlox template overrides for APA-style publication pages
 
 ## Installation
@@ -79,11 +81,24 @@ examples/hugo-site-overrides/
 
 These can be copied into a HugoBlox site if you want the same APA-style citation rendering and publication metadata layout used during development.
 
+## Monthly GitHub Actions sync
+
+The repository now includes `.github/workflows/monthly-orcid-sync.yml` for an automated ORCID refresh on the **1st day of each month** and via manual dispatch.
+
+Set these repository variables in GitHub:
+
+- `ORCID_ID` **required** – the ORCID iD to sync
+- `PUBLICATIONS_PATH` optional – defaults to `content/publications`
+- `ORCID_IMPORT_ARGS` optional – extra CLI flags such as `--no-download-pdf`
+
+The workflow commits changes only when new publication bundles are added, and reruns skip already imported entries by matching **DOI** and **ORCID work ID**.
+
 ## Development
 
 ```bash
 python -m pip install -e .[pdf]
 python -m compileall src
+python -m unittest discover -s tests -p 'test_*.py'
 python scripts/orcid_import.py --help
 hugoblox-orcid-import --help
 ```

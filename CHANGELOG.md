@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 - 2026-04-10
+
+- add a monthly GitHub Actions workflow for automated ORCID syncs
+- skip already imported publications more reliably by matching DOI and ORCID work IDs
+- add regression tests for duplicate-avoidance on reruns
+
 ## 0.1.0 - 2026-04-08
 
 Initial public packaging of the HugoBlox ORCID importer:

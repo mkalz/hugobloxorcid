@@ -29,6 +29,9 @@ jobs:
       - name: Compile source
         run: python -m compileall src
 
+      - name: Run regression tests
+        run: python -m unittest discover -s tests -p 'test_*.py'
+
       - name: Smoke test CLI
         run: |
           python scripts/orcid_import.py --help

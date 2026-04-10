@@ -77,6 +77,50 @@ def first_text(value) -> str | None:
     return text or None
 
 
+def normalize_identifier(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    return normalized or None
+
+
+def collect_existing_identifiers(content_root: Path) -> tuple[set[str], set[str]]:
+    existing_dois: set[str] = set()
+    existing_orcid_work_ids: set[str] = set()
+
+    for index_path in content_root.glob("*/index.md"):
+        try:
+            text = index_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+
+        for line in text.splitlines():
+            doi_match = re.match(r'^\s*doi:\s*["\']?([^"\']+)["\']?\s*$', line)
+            if doi_match:
+                doi_value = normalize_identifier(doi_match.group(1))
+                if doi_value:
+                    existing_dois.add(doi_value)
+
+            orcid_match = re.match(r'^\s*orcid:\s*["\']?([^"\']+)["\']?\s*$', line)
+            if orcid_match:
+                orcid_value = orcid_match.group(1).strip()
+                if orcid_value:
+                    existing_orcid_work_ids.add(orcid_value)
+
+    for bib_path in content_root.glob("*/cite.bib"):
+        try:
+            text = bib_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+
+        for match in re.findall(r'(?im)^\s*doi\s*=\s*\{([^}]+)\}', text):
+            doi_value = normalize_identifier(match)
+            if doi_value:
+                existing_dois.add(doi_value)
+
+    return existing_dois, existing_orcid_work_ids
+
+
 def map_publication_type(value: str | None) -> str:
     if not value:
         return "article-journal"
@@ -591,7 +635,7 @@ def download_pdf_from_sources(urls: list[str], target_path: Path, doi: str | Non
     return False
 
 
-def parse_work(work: dict, orcid_id: str, author_name: str | None) -> tuple[dict, str, list[str], str | None]:
+def parse_work(work: dict, orcid_id: str, author_name: str | None) -> tuple[dict, str, list[str], str | None, str]:
     title_data = work.get("title") or {}
     title_value = safe_get(title_data, "title") or {}
     title = safe_get(title_value, "value")
@@ -726,12 +770,16 @@ def parse_work(work: dict, orcid_id: str, author_name: str | None) -> tuple[dict
         {"type": "source", "url": source_url} if source_url else None,
         {"type": "pdf", "url": direct_pdf} if direct_pdf else None,
     ]
+    work_id = f"{orcid_id}:{put_code}"
+    hugoblox_ids = {"orcid": work_id}
+    if doi:
+        hugoblox_ids["doi"] = doi
 
     return {
         "title": title or "Untitled publication",
         "authors": authors,
         "date": date_value,
-        "hugoblox": {"ids": {"doi": doi}} if doi else {},
+        "hugoblox": {"ids": hugoblox_ids},
         "publication_types": [publication_type],
         "publication": publication_venue,
         "publication_short": publication_short,
@@ -743,7 +791,7 @@ def parse_work(work: dict, orcid_id: str, author_name: str | None) -> tuple[dict
         "featured": False,
         "summary": abstract or title or "",
         "tags": tags,
-    }, format_bibtex_entry(fields, bib_key), url_candidates, doi
+    }, format_bibtex_entry(fields, bib_key), url_candidates, doi, work_id
 
 
 def main() -> int:
@@ -779,6 +827,7 @@ def main() -> int:
     orcid_id = parse_orcid_id(args.orcid)
     content_root = Path(args.output)
     content_root.mkdir(parents=True, exist_ok=True)
+    existing_dois, existing_orcid_work_ids = collect_existing_identifiers(content_root)
 
     person_data = None
     if not args.author:
@@ -816,14 +865,21 @@ def main() -> int:
         except Exception as exc:
             warnings.append(f"Failed to fetch work {put_code}: {exc}")
             continue
-        publication, bibtex, pdf_urls, doi = parse_work(work_details, orcid_id, author_name)
+        publication, bibtex, pdf_urls, doi, work_id = parse_work(work_details, orcid_id, author_name)
         folder_slug = folder_slug_from_title(publication["title"], publication.get("date"))
         if args.only_slug and folder_slug != args.only_slug:
             continue
+
+        normalized_doi = normalize_identifier(doi)
         folder = content_root / folder_slug
-        if folder.exists() and not args.force:
-            skipped += 1
-            continue
+        if not args.force:
+            if folder.exists() or work_id in existing_orcid_work_ids:
+                skipped += 1
+                continue
+            if normalized_doi and normalized_doi in existing_dois:
+                skipped += 1
+                continue
+
         folder.mkdir(parents=True, exist_ok=True)
 
         front_matter = {k: v for k, v in publication.items() if v is not None}
@@ -865,6 +921,9 @@ def main() -> int:
             if args.featured_from_title_fallback:
                 warnings.append(f"No PDF available for {folder_slug}; skipping featured image because no PDF was downloaded")
 
+        if normalized_doi:
+            existing_dois.add(normalized_doi)
+        existing_orcid_work_ids.add(work_id)
         created += 1
 
     print(f"Imported {created} publications, skipped {skipped} existing entries.")
