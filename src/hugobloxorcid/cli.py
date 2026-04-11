@@ -262,6 +262,25 @@ def build_front_matter(data: dict) -> str:
     return "\n".join(lines)
 
 
+def write_bundle(folder: Path, front_matter: dict, body_text: str = "", bibtex: str | None = None) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+
+    clean_front_matter = {k: v for k, v in front_matter.items() if v is not None}
+    if clean_front_matter.get("links"):
+        clean_front_matter["links"] = [link for link in clean_front_matter["links"] if link]
+
+    index_md = build_front_matter(clean_front_matter)
+    body = (body_text or "").strip()
+    if body:
+        index_md += "\n\n" + body
+    else:
+        index_md += "\n"
+    (folder / "index.md").write_text(index_md, encoding="utf-8")
+
+    if bibtex is not None:
+        (folder / "cite.bib").write_text(bibtex, encoding="utf-8")
+
+
 def format_bibtex_entry(record: dict, key: str) -> str:
     fields = []
     for field, value in record.items():
@@ -500,6 +519,12 @@ def collect_work_urls(work: dict, doi: str | None) -> list[str]:
     citation_value = citation.get("work-citation")
     if isinstance(citation_value, str):
         urls.extend(re.findall(r"https?://[^\s'\"<>]+", citation_value))
+
+    external_ids = work.get("external-ids") or {}
+    for item in external_ids.get("external-id", []) or []:
+        external_url = safe_get(safe_get(item, "external-id-url") or {}, "value")
+        if external_url:
+            urls.append(external_url)
 
     if doi:
         urls.append(f"https://doi.org/{doi}")
@@ -794,12 +819,134 @@ def parse_work(work: dict, orcid_id: str, author_name: str | None) -> tuple[dict
     }, format_bibtex_entry(fields, bib_key), url_candidates, doi, work_id
 
 
+def infer_project_status(start_date: str | None, end_date: str | None) -> str:
+    today = datetime.date.today().isoformat()
+    if start_date and start_date > today:
+        return "planned"
+    if end_date and end_date < today:
+        return "completed"
+    return "active"
+
+
+def parse_funding(funding: dict, orcid_id: str, author_name: str | None) -> tuple[dict, str, str]:
+    title_data = funding.get("title") or funding.get("funding-title") or {}
+    title_value = safe_get(title_data, "title") or {}
+    title = safe_get(title_value, "value") or safe_get(title_data, "value")
+
+    put_code = funding.get("put-code") or str(funding.get("id"))
+    start_date = parse_publication_date(funding.get("start-date"))
+    end_date = parse_publication_date(funding.get("end-date"))
+    date_value = start_date or end_date or datetime.date.today().isoformat()
+
+    organization_data = funding.get("organization") or {}
+    funder = first_text(safe_get(organization_data, "name"))
+    authors = extract_work_authors(funding, author_name or funder, orcid_id)
+
+    description_value = (
+        safe_get(safe_get(funding, "short-description") or {}, "value")
+        or safe_get(safe_get(funding, "description") or {}, "value")
+        or safe_get(funding, "short-description")
+        or safe_get(funding, "description")
+    )
+    description = clean_text(first_text(description_value))
+
+    url_candidates = collect_work_urls(funding, None)
+    identifier_map: dict[str, list[str]] = {}
+    external_ids_data = funding.get("external-ids") or {}
+    for item in external_ids_data.get("external-id", []) or []:
+        if not isinstance(item, dict):
+            continue
+        identifier_type = normalize_identifier(safe_get(item, "external-id-type")) or "id"
+        identifier_value = first_text(safe_get(item, "external-id-value"))
+        if identifier_value:
+            normalized_value = str(identifier_value).strip()
+            values = identifier_map.setdefault(identifier_type, [])
+            if normalized_value not in values:
+                values.append(normalized_value)
+        external_url = safe_get(safe_get(item, "external-id-url") or {}, "value")
+        if external_url:
+            url_candidates.append(str(external_url).strip())
+
+    cleaned_urls: list[str] = []
+    for url in url_candidates:
+        normalized = normalize_url(url) if url else ""
+        if normalized and normalized not in cleaned_urls:
+            cleaned_urls.append(normalized)
+    url_candidates = cleaned_urls
+
+    grant_number = None
+    preferred_identifier_types = (
+        "grant_number",
+        "grant-number",
+        "award-number",
+        "award_number",
+        "contract-number",
+        "contract_number",
+        "proposal-id",
+    )
+    for identifier_type in preferred_identifier_types:
+        values = identifier_map.get(identifier_type)
+        if values:
+            grant_number = values[0]
+            break
+    if not grant_number:
+        for identifier_type, values in identifier_map.items():
+            if identifier_type != "doi" and values:
+                grant_number = values[0]
+                break
+
+    amount_data = funding.get("amount") or {}
+    amount_value = first_text(safe_get(amount_data, "value"))
+    currency_code = first_text(safe_get(amount_data, "currency-code"))
+    grant_amount = f"{amount_value} {currency_code}" if amount_value and currency_code else amount_value
+
+    funding_type = first_text(funding.get("type"))
+    status = infer_project_status(start_date, end_date)
+    tags = []
+    for value in (funder, funding_type, status):
+        if value:
+            tags.append(str(value).strip())
+    seen = set()
+    tags = [tag for tag in tags if tag and not (tag in seen or seen.add(tag))]
+
+    source_url = next((url for url in url_candidates if url), None)
+    grant_id = f"{orcid_id}:funding:{put_code}"
+    hugoblox_ids = {"orcid": grant_id}
+    if grant_number:
+        hugoblox_ids["grant"] = grant_number
+
+    project = {
+        "title": title or "Untitled grant",
+        "authors": authors,
+        "date": date_value,
+        "lastmod": end_date or date_value,
+        "summary": description or title or "",
+        "tags": tags,
+        "external_link": source_url,
+        "links": [{"type": "source", "url": source_url}] if source_url else [],
+        "funder": funder,
+        "grant_number": grant_number,
+        "grant_amount": grant_amount,
+        "grant_currency": currency_code,
+        "start_date": start_date,
+        "end_date": end_date,
+        "project_status": status,
+        "hugoblox": {"ids": hugoblox_ids, "source": "orcid-funding"},
+    }
+    return project, description, grant_id
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Import ORCID publications into HugoBlox content/publications")
+    parser = argparse.ArgumentParser(description="Import ORCID publications and grants into HugoBlox content bundles")
     parser.add_argument("orcid", help="ORCID iD or ORCID URL")
     parser.add_argument("--output", default="content/publications", help="Output folder for content/publications")
-    parser.add_argument("--author", help="Default author name for imported works")
-    parser.set_defaults(download_pdf=True)
+    parser.add_argument(
+        "--projects-output",
+        default="content/project",
+        help="Output folder for content/project grant bundles",
+    )
+    parser.add_argument("--author", help="Default author name for imported works and grants")
+    parser.set_defaults(download_pdf=True, import_grants=True)
     parser.add_argument(
         "--download-pdf",
         dest="download_pdf",
@@ -813,21 +960,40 @@ def main() -> int:
         help="Skip PDF download and PDF-based cover generation",
     )
     parser.add_argument(
+        "--import-grants",
+        dest="import_grants",
+        action="store_true",
+        help="Import ORCID funding records into project bundles (default)",
+    )
+    parser.add_argument(
+        "--no-import-grants",
+        dest="import_grants",
+        action="store_false",
+        help="Skip ORCID funding and grant import",
+    )
+    parser.add_argument(
         "--featured-from-title-fallback",
         action="store_true",
         help="Create a title-based fallback only if a PDF exists but its preview image cannot be rendered",
     )
     parser.add_argument(
         "--only-slug",
-        help="Only process a single publication folder slug (for targeted regeneration)",
+        help="Only process a single publication or project folder slug (for targeted regeneration)",
     )
-    parser.add_argument("--force", action="store_true", help="Overwrite existing publication folders")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing publication or project folders")
     args = parser.parse_args()
 
     orcid_id = parse_orcid_id(args.orcid)
     content_root = Path(args.output)
     content_root.mkdir(parents=True, exist_ok=True)
     existing_dois, existing_orcid_work_ids = collect_existing_identifiers(content_root)
+
+    project_root = Path(args.projects_output)
+    if args.import_grants:
+        project_root.mkdir(parents=True, exist_ok=True)
+        project_dois, project_orcid_work_ids = collect_existing_identifiers(project_root)
+        existing_dois.update(project_dois)
+        existing_orcid_work_ids.update(project_orcid_work_ids)
 
     person_data = None
     if not args.author:
@@ -837,20 +1003,45 @@ def main() -> int:
             pass
     author_name = args.author or (extract_author_name(person_data) if person_data else None)
 
+    works_error = None
     try:
         works_data = http_get_json(f"{API_BASE}/{orcid_id}/works")
     except Exception as exc:
-        print(f"Error fetching ORCID works: {exc}", file=sys.stderr)
-        return 2
+        works_error = exc
+        works_data = {"group": []}
+
+    funding_error = None
+    funding_groups = []
+    if args.import_grants:
+        try:
+            funding_data = http_get_json(f"{API_BASE}/{orcid_id}/fundings")
+            funding_groups = funding_data.get("group", [])
+        except Exception as exc:
+            funding_error = exc
 
     groups = works_data.get("group", [])
-    if not groups:
-        print("No works found for ORCID", orcid_id)
+    if works_error and not groups and (not args.import_grants or (funding_error and not funding_groups)):
+        print(f"Error fetching ORCID works: {works_error}", file=sys.stderr)
+        if funding_error and not funding_groups:
+            print(f"Error fetching ORCID grants: {funding_error}", file=sys.stderr)
+        return 2
+
+    if not groups and not funding_groups:
+        if args.import_grants:
+            print("No works or grants found for ORCID", orcid_id)
+        else:
+            print("No works found for ORCID", orcid_id)
         return 0
 
     created = 0
+    grants_created = 0
     skipped = 0
     warnings = []
+
+    if works_error and not groups:
+        warnings.append(f"Failed to fetch ORCID works: {works_error}")
+    if funding_error and not funding_groups:
+        warnings.append(f"Failed to fetch ORCID grants: {funding_error}")
 
     for group in groups:
         summaries = group.get("work-summary", [])
@@ -880,15 +1071,7 @@ def main() -> int:
                 skipped += 1
                 continue
 
-        folder.mkdir(parents=True, exist_ok=True)
-
-        front_matter = {k: v for k, v in publication.items() if v is not None}
-        if front_matter.get("links"):
-            front_matter["links"] = [link for link in front_matter["links"] if link]
-
-        index_md = build_front_matter(front_matter) + "\n\n" + (publication.get("abstract") or "")
-        (folder / "index.md").write_text(index_md, encoding="utf-8")
-        (folder / "cite.bib").write_text(bibtex, encoding="utf-8")
+        write_bundle(folder, publication, publication.get("abstract") or "", bibtex=bibtex)
 
         featured_path = folder / "featured.png"
         pdf_path = folder / PDF_FILE_NAME
@@ -926,7 +1109,39 @@ def main() -> int:
         existing_orcid_work_ids.add(work_id)
         created += 1
 
-    print(f"Imported {created} publications, skipped {skipped} existing entries.")
+    for group in funding_groups:
+        summaries = group.get("funding-summary", [])
+        if not summaries:
+            continue
+        funding_summary = summaries[0]
+        put_code = funding_summary.get("put-code")
+        if not put_code:
+            continue
+        try:
+            funding_details = http_get_json(f"{API_BASE}/{orcid_id}/funding/{put_code}")
+        except Exception as exc:
+            warnings.append(f"Failed to fetch grant {put_code}: {exc}")
+            continue
+
+        project, body_text, grant_id = parse_funding(funding_details, orcid_id, author_name)
+        folder_slug = folder_slug_from_title(project["title"], project.get("date"))
+        if args.only_slug and folder_slug != args.only_slug:
+            continue
+
+        folder = project_root / folder_slug
+        if not args.force and (folder.exists() or grant_id in existing_orcid_work_ids):
+            skipped += 1
+            continue
+
+        write_bundle(folder, project, body_text)
+        existing_orcid_work_ids.add(grant_id)
+        grants_created += 1
+
+    summary = f"Imported {created} publications"
+    if grants_created:
+        summary += f" and {grants_created} grants"
+    summary += f", skipped {skipped} existing entries."
+    print(summary)
     if warnings:
         print("Warnings:")
         for warning in warnings:

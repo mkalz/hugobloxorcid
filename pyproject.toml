@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hugobloxorcid"
-version = "0.2.0"
-description = "Import ORCID publications into HugoBlox/Hugo publication bundles with DOI enrichment, PDF fetching, and cover generation."
+version = "0.3.0"
+description = "Import ORCID publications and grant data into HugoBlox/Hugo publication and project bundles with DOI enrichment, PDF fetching, and cover generation."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

@@ -4,17 +4,18 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
-Import publications from **ORCID** into HugoBlox/Hugo `content/publications/` bundles, with optional **Crossref DOI enrichment**, **PDF download**, and **cover image generation**.
+Import publications and grant data from **ORCID** into HugoBlox/Hugo `content/publications/` and `content/project/` bundles, with optional **Crossref DOI enrichment**, **PDF download**, and **cover image generation**.
 
 ## Features
 
-- imports ORCID works into Hugo leaf bundles
-- writes `index.md` and `cite.bib`
-- enriches DOI-based records from Crossref
+- imports ORCID works into Hugo publication bundles
+- imports ORCID funding records into Hugo project bundles
+- writes `index.md` and `cite.bib` for publications, plus project `index.md` bundles for grants
+- enriches DOI-based publication records from Crossref
 - downloads `index.pdf` when a reachable PDF is available
 - generates `featured.png` from the PDF
 - avoids orphan screenshots when no PDF could be fetched
-- skips already imported publications reliably via DOI and ORCID work identifiers
+- skips already imported publications and grants reliably via DOI and ORCID identifiers
 - includes a monthly GitHub Actions sync workflow for hands-free updates
 - includes optional HugoBlox template overrides for APA-style publication pages
 
@@ -58,16 +59,24 @@ hugoblox-orcid-import 0000-0003-1471-5827 --only-slug 2025-mediendidaktik-als-im
 
 # Skip PDF fetching entirely
 hugoblox-orcid-import 0000-0003-1471-5827 --no-download-pdf
+
+# Import publications and grant/project bundles into custom folders
+hugoblox-orcid-import 0000-0003-1471-5827 --output content/publications --projects-output content/project
+
+# Keep publication import only
+hugoblox-orcid-import 0000-0003-1471-5827 --no-import-grants
 ```
 
 ## Output
 
-Each publication bundle may contain:
+Publication bundles may contain:
 
 - `index.md`
 - `cite.bib`
 - `index.pdf` when available
 - `featured.png` when generated from the PDF
+
+Project/grant bundles are written to `content/project/` (or `--projects-output`) and include grant metadata such as the funder, grant number, amount, and dates in `index.md`.
 
 > `featured.png` is only kept when `index.pdf` exists.
 

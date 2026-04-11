@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 - 2026-04-11
+
+- add ORCID funding/grant import into HugoBlox `content/project` leaf bundles
+- add `--projects-output` plus `--no-import-grants` CLI controls for project bundle generation
+- add regression coverage for grant bundle creation alongside existing publication deduplication tests
+
 ## 0.2.0 - 2026-04-10
 
 - add a monthly GitHub Actions workflow for automated ORCID syncs
